@@ -14,6 +14,8 @@ from trading_calendars.us_futures_calendar import (
     QuantopianUSFuturesCalendar,
 )
 
+from trading_calendars.exchange_calendar_nse import NSEExchangeCalendar
+
 _default_calendar_factories = {
     'NYSE': NYSEExchangeCalendar,
     'CME': CMEExchangeCalendar,
@@ -23,6 +25,7 @@ _default_calendar_factories = {
     'LSE': LSEExchangeCalendar,
     'TSX': TSXExchangeCalendar,
     'us_futures': QuantopianUSFuturesCalendar,
+    'NSE': NSEExchangeCalendar
 }
 _default_calendar_aliases = {
     'NASDAQ': 'NYSE',
