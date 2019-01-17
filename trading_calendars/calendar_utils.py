@@ -1,40 +1,98 @@
-from trading_calendars.errors import (
+from .always_open import AlwaysOpenCalendar
+from .errors import (
     CalendarNameCollision,
     CyclicCalendarAlias,
     InvalidCalendarName,
 )
-from trading_calendars.exchange_calendar_cfe import CFEExchangeCalendar
-from trading_calendars.exchange_calendar_ice import ICEExchangeCalendar
-from trading_calendars.exchange_calendar_nyse import NYSEExchangeCalendar
-from trading_calendars.exchange_calendar_cme import CMEExchangeCalendar
-from trading_calendars.exchange_calendar_bmf import BMFExchangeCalendar
-from trading_calendars.exchange_calendar_lse import LSEExchangeCalendar
-from trading_calendars.exchange_calendar_tsx import TSXExchangeCalendar
-from trading_calendars.us_futures_calendar import (
-    QuantopianUSFuturesCalendar,
-)
+from .exchange_calendar_bvmf import BVMFExchangeCalendar
+from .exchange_calendar_cmes import CMESExchangeCalendar
+from .exchange_calendar_iepa import IEPAExchangeCalendar
+from .exchange_calendar_xams import XAMSExchangeCalendar
+from .exchange_calendar_xasx import XASXExchangeCalendar
+from .exchange_calendar_xbom import XBOMExchangeCalendar
+from .exchange_calendar_xbru import XBRUExchangeCalendar
+from .exchange_calendar_xcbf import XCBFExchangeCalendar
+from .exchange_calendar_xcse import XCSEExchangeCalendar
+from .exchange_calendar_xdub import XDUBExchangeCalendar
+from .exchange_calendar_xfra import XFRAExchangeCalendar
+from .exchange_calendar_xhel import XHELExchangeCalendar
+from .exchange_calendar_xhkg import XHKGExchangeCalendar
+from .exchange_calendar_xice import XICEExchangeCalendar
+from .exchange_calendar_xkrx import XKRXExchangeCalendar
+from .exchange_calendar_xlis import XLISExchangeCalendar
+from .exchange_calendar_xlon import XLONExchangeCalendar
+from .exchange_calendar_xmad import XMADExchangeCalendar
+from .exchange_calendar_xmil import XMILExchangeCalendar
+from .exchange_calendar_xnys import XNYSExchangeCalendar
+from .exchange_calendar_xnze import XNZEExchangeCalendar
+from .exchange_calendar_xosl import XOSLExchangeCalendar
+from .exchange_calendar_xpar import XPARExchangeCalendar
+from .exchange_calendar_xses import XSESExchangeCalendar
+from .exchange_calendar_xshg import XSHGExchangeCalendar
+from .exchange_calendar_xsto import XSTOExchangeCalendar
+from .exchange_calendar_xswx import XSWXExchangeCalendar
+from .exchange_calendar_xtks import XTKSExchangeCalendar
+from .exchange_calendar_xtse import XTSEExchangeCalendar
+from .exchange_calendar_xwbo import XWBOExchangeCalendar
+from .us_futures_calendar import QuantopianUSFuturesCalendar
+from .weekday_calendar import WeekdayCalendar
 
 from trading_calendars.exchange_calendar_nse import NSEExchangeCalendar
 
 _default_calendar_factories = {
-    'NYSE': NYSEExchangeCalendar,
-    'CME': CMEExchangeCalendar,
-    'ICE': ICEExchangeCalendar,
-    'CFE': CFEExchangeCalendar,
-    'BMF': BMFExchangeCalendar,
-    'LSE': LSEExchangeCalendar,
-    'TSX': TSXExchangeCalendar,
+    # Exchange calendars.
+    'BVMF': BVMFExchangeCalendar,
+    'CMES': CMESExchangeCalendar,
+    'IEPA': IEPAExchangeCalendar,
+    'XAMS': XAMSExchangeCalendar,
+    'XASX': XASXExchangeCalendar,
+    'XBOM': XBOMExchangeCalendar,
+    'XBRU': XBRUExchangeCalendar,
+    'XCBF': XCBFExchangeCalendar,
+    'XCSE': XCSEExchangeCalendar,
+    'XDUB': XDUBExchangeCalendar,
+    'XFRA': XFRAExchangeCalendar,
+    'XHEL': XHELExchangeCalendar,
+    'XHKG': XHKGExchangeCalendar,
+    'XICE': XICEExchangeCalendar,
+    'XKRX': XKRXExchangeCalendar,
+    'XLIS': XLISExchangeCalendar,
+    'XLON': XLONExchangeCalendar,
+    'XMAD': XMADExchangeCalendar,
+    'XMIL': XMILExchangeCalendar,
+    'XNYS': XNYSExchangeCalendar,
+    'XNZE': XNZEExchangeCalendar,
+    'XOSL': XOSLExchangeCalendar,
+    'XPAR': XPARExchangeCalendar,
+    'XSES': XSESExchangeCalendar,
+    'XSHG': XSHGExchangeCalendar,
+    'XSTO': XSTOExchangeCalendar,
+    'XSWX': XSWXExchangeCalendar,
+    'XTKS': XTKSExchangeCalendar,
+    'XTSE': XTSEExchangeCalendar,
+    'XWBO': XWBOExchangeCalendar,
+    # Miscellaneous calendars.
     'us_futures': QuantopianUSFuturesCalendar,
-    'NSE': NSEExchangeCalendar
+    'NSE': NSEExchangeCalendar,
+    '24/7': AlwaysOpenCalendar,
+    '24/5': WeekdayCalendar,
 }
 _default_calendar_aliases = {
-    'NASDAQ': 'NYSE',
-    'BATS': 'NYSE',
-    'CBOT': 'CME',
-    'COMEX': 'CME',
-    'NYMEX': 'CME',
-    'ICEUS': 'ICE',
-    'NYFE': 'ICE',
+    'NYSE': 'XNYS',
+    'NASDAQ': 'XNYS',
+    'BATS': 'XNYS',
+    'FWB': 'XFRA',
+    'LSE': 'XLON',
+    'TSX': 'XTSE',
+    'BMF': 'BVMF',
+    'CME': 'CMES',
+    'CBOT': 'CMES',
+    'COMEX': 'CMES',
+    'NYMEX': 'CMES',
+    'ICE': 'IEPA',
+    'ICEUS': 'IEPA',
+    'NYFE': 'IEPA',
+    'CFE': 'XCBF',
 }
 default_calendar_names = sorted(_default_calendar_factories.keys())
 
@@ -57,8 +115,8 @@ class TradingCalendarDispatcher(object):
     """
     def __init__(self, calendars, calendar_factories, aliases):
         self._calendars = calendars
-        self._calendar_factories = calendar_factories
-        self._aliases = aliases
+        self._calendar_factories = dict(calendar_factories)
+        self._aliases = dict(aliases)
 
     def get_calendar(self, name):
         """
@@ -213,8 +271,6 @@ class TradingCalendarDispatcher(object):
         canonical_name : str
             The real name of the calendar to create/return.
         """
-        # Use an OrderedDict as an ordered set so that we can return the order
-        # of aliases in the event of a cycle.
         seen = []
 
         while name in self._aliases:

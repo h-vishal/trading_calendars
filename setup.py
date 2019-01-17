@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright 2016 Quantopian, Inc.
+# Copyright 2018 Quantopian, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -72,6 +72,8 @@ if __name__ == '__main__':
         url=URL,
         classifiers=classifiers,
         long_description=LONG_DESCRIPTION,
-        packages=find_packages(include='trading_calendars.*'),
+        packages=find_packages(
+            include=['trading_calendars', 'trading_calendars.*']
+        ),
         install_requires=reqs,
     )

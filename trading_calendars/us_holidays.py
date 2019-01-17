@@ -16,7 +16,8 @@ from dateutil.relativedelta import (
 )
 from pandas.tseries.offsets import Day
 
-from trading_calendars.trading_calendar import (
+from .common_holidays import new_years_day
+from .trading_calendar import (
     MONDAY,
     TUESDAY,
     WEDNESDAY,
@@ -47,10 +48,7 @@ ChristmasEveInOrAfter1993 = Holiday(
     # When Christmas is a Saturday, the 24th is a full holiday.
     days_of_week=(MONDAY, TUESDAY, WEDNESDAY, THURSDAY),
 )
-USNewYearsDay = Holiday(
-    'New Years Day',
-    month=1,
-    day=1,
+USNewYearsDay = new_years_day(
     # When Jan 1 is a Sunday, US markets observe the subsequent Monday.
     # When Jan 1 is a Saturday (as in 2005 and 2011), no holiday is observed.
     observance=sunday_to_monday
@@ -143,8 +141,10 @@ HurricaneSandyClosings = date_range(
 # - President Richard Nixon - April 27, 1994
 # - President Ronald W. Reagan - June 11, 2004
 # - President Gerald R. Ford - Jan 2, 2007
+# - President George H.W. Bush - Dec 5, 2018
 USNationalDaysofMourning = [
     Timestamp('1994-04-27', tz='UTC'),
     Timestamp('2004-06-11', tz='UTC'),
     Timestamp('2007-01-02', tz='UTC'),
+    Timestamp('2018-12-05', tz='UTC'),
 ]

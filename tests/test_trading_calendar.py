@@ -1,5 +1,5 @@
 #
-# Copyright 2016 Quantopian, Inc.
+# Copyright 2018 Quantopian, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,15 +35,12 @@ from trading_calendars.errors import (
 )
 
 from trading_calendars import (
-    deregister_calendar,
     get_calendar,
-    register_calendar,
 )
 from trading_calendars.calendar_utils import (
     _default_calendar_aliases,
     _default_calendar_factories,
-    register_calendar_type,
-
+    TradingCalendarDispatcher,
 )
 from trading_calendars.trading_calendar import (
     days_at_time,
@@ -52,87 +49,92 @@ from trading_calendars.trading_calendar import (
 
 
 class FakeCalendar(TradingCalendar):
-    @property
-    def name(self):
-        return "DMY"
-
-    @property
-    def tz(self):
-        return "Asia/Ulaanbaatar"
-
-    @property
-    def open_time(self):
-        return time(11, 13)
-
-    @property
-    def close_time(self):
-        return time(11, 49)
+    name = 'DMY'
+    tz = 'Asia/Ulaanbaatar'
+    open_times = (
+        (None, time(11, 13)),
+    )
+    close_times = (
+        (None, time(11, 49)),
+    )
 
 
 class CalendarRegistrationTestCase(TestCase):
     def setUp(self):
         self.dummy_cal_type = FakeCalendar
+        self.dispatcher = TradingCalendarDispatcher({}, {}, {})
 
     def tearDown(self):
-        deregister_calendar('DMY')
+        self.dispatcher.clear_calendars()
 
     def test_register_calendar(self):
         # Build a fake calendar
         dummy_cal = self.dummy_cal_type()
 
         # Try to register and retrieve the calendar
-        register_calendar('DMY', dummy_cal)
-        retr_cal = get_calendar('DMY')
+        self.dispatcher.register_calendar('DMY', dummy_cal)
+        retr_cal = self.dispatcher.get_calendar('DMY')
         self.assertEqual(dummy_cal, retr_cal)
 
         # Try to register again, expecting a name collision
         with self.assertRaises(CalendarNameCollision):
-            register_calendar('DMY', dummy_cal)
+            self.dispatcher.register_calendar('DMY', dummy_cal)
 
         # Deregister the calendar and ensure that it is removed
-        deregister_calendar('DMY')
+        self.dispatcher.deregister_calendar('DMY')
         with self.assertRaises(InvalidCalendarName):
-            get_calendar('DMY')
+            self.dispatcher.get_calendar('DMY')
 
     def test_register_calendar_type(self):
-        register_calendar_type("DMY", self.dummy_cal_type)
-        retr_cal = get_calendar("DMY")
+        self.dispatcher.register_calendar_type("DMY", self.dummy_cal_type)
+        retr_cal = self.dispatcher.get_calendar("DMY")
         self.assertEqual(self.dummy_cal_type, type(retr_cal))
 
     def test_both_places_are_checked(self):
         dummy_cal = self.dummy_cal_type()
 
         # if instance is registered, can't register type with same name
-        register_calendar('DMY', dummy_cal)
+        self.dispatcher.register_calendar('DMY', dummy_cal)
         with self.assertRaises(CalendarNameCollision):
-            register_calendar_type('DMY', type(dummy_cal))
+            self.dispatcher.register_calendar_type('DMY', type(dummy_cal))
 
-        deregister_calendar('DMY')
+        self.dispatcher.deregister_calendar('DMY')
 
         # if type is registered, can't register instance with same name
-        register_calendar_type('DMY', type(dummy_cal))
+        self.dispatcher.register_calendar_type('DMY', type(dummy_cal))
 
         with self.assertRaises(CalendarNameCollision):
-            register_calendar('DMY', dummy_cal)
+            self.dispatcher.register_calendar('DMY', dummy_cal)
 
     def test_force_registration(self):
-        register_calendar("DMY", self.dummy_cal_type())
-        first_dummy = get_calendar("DMY")
+        self.dispatcher.register_calendar("DMY", self.dummy_cal_type())
+        first_dummy = self.dispatcher.get_calendar("DMY")
 
         # force-register a new instance
-        register_calendar("DMY", self.dummy_cal_type(), force=True)
+        self.dispatcher.register_calendar("DMY", self.dummy_cal_type(),
+                                          force=True)
 
-        second_dummy = get_calendar("DMY")
+        second_dummy = self.dispatcher.get_calendar("DMY")
 
         self.assertNotEqual(first_dummy, second_dummy)
 
 
 class DefaultsTestCase(TestCase):
     def test_default_calendars(self):
-        for name in concat([_default_calendar_factories,
-                            _default_calendar_aliases]):
-            self.assertIsNotNone(get_calendar(name),
+        dispatcher = TradingCalendarDispatcher(
+            calendars={},
+            calendar_factories=_default_calendar_factories,
+            aliases=_default_calendar_aliases,
+        )
+
+        # These are ordered aliases first, so that we can deregister the
+        # canonical factories when we're done with them, and we'll be done with
+        # them after they've been used by all aliases and by canonical name.
+        for name in concat([_default_calendar_aliases,
+                            _default_calendar_factories]):
+            self.assertIsNotNone(dispatcher.get_calendar(name),
                                  "get_calendar(%r) returned None" % name)
+            dispatcher.deregister_calendar(name)
 
 
 class DaysAtTimeTestCase(TestCase):
@@ -171,14 +173,41 @@ class ExchangeCalendarTestBase(object):
     answer_key_filename = None
     calendar_class = None
 
+    # Affects tests that care about the empty periods between sessions. Should
+    # be set to False for 24/7 calendars.
     GAPS_BETWEEN_SESSIONS = True
 
+    # Affects tests that care about early closes. Should be set to False for
+    # calendars that don't have any early closes.
+    HAVE_EARLY_CLOSES = True
+
+    # Affects tests that care about late opens. Since most do not, defaulting
+    # to False.
+    HAVE_LATE_OPENS = False
+
+    # Affects test_sanity_check_session_lengths. Should be set to the largest
+    # number of hours that ever appear in a single session.
     MAX_SESSION_HOURS = 0
+
+    # Affects test_minute_index_to_session_labels.
+    # Change these if the start/end dates of your test suite don't contain the
+    # defaults.
+    MINUTE_INDEX_TO_SESSION_LABELS_START = pd.Timestamp('2011-01-04', tz='UTC')
+    MINUTE_INDEX_TO_SESSION_LABELS_END = pd.Timestamp('2011-04-04', tz='UTC')
+
+    # Affects tests around daylight savings. If possible, should contain two
+    # dates that are not both in the same daylight savings regime.
+    DAYLIGHT_SAVINGS_DATES = ["2004-04-05", "2004-11-01"]
+
+    # Affects test_start_end. Change these if your calendar start/end
+    # dates between 2010-01-03 and 2010-01-10 don't match the defaults.
+    TEST_START_END_EXPECTED_FIRST = pd.Timestamp('2010-01-04', tz='UTC')
+    TEST_START_END_EXPECTED_LAST = pd.Timestamp('2010-01-08', tz='UTC')
 
     @staticmethod
     def load_answer_key(filename):
         """
-        Load a CSV from tests/resources/calendars/{filename}.csv
+        Load a CSV from tests/resources/{filename}.csv
         """
         fullpath = join(
             dirname(abspath(__file__)),
@@ -207,12 +236,17 @@ class ExchangeCalendarTestBase(object):
         cls.one_minute = pd.Timedelta(minutes=1)
         cls.one_hour = pd.Timedelta(hours=1)
 
+    @classmethod
+    def teardownClass(cls):
+        cls.calendar = None
+        cls.answers = None
+
     def test_sanity_check_session_lengths(self):
         # make sure that no session is longer than self.MAX_SESSION_HOURS hours
         for session in self.calendar.all_sessions:
             o, c = self.calendar.open_and_close_for_session(session)
             delta = c - o
-            self.assertTrue((delta.seconds / 3600) <= self.MAX_SESSION_HOURS)
+            self.assertLessEqual(delta.seconds / 3600, self.MAX_SESSION_HOURS)
 
     def test_calculated_against_csv(self):
         assert_index_equal(self.calendar.schedule.index, self.answers.index)
@@ -454,8 +488,8 @@ class ExchangeCalendarTestBase(object):
     ])
     def test_minute_index_to_session_labels(self, interval, offset):
         minutes = self.calendar.minutes_for_sessions_in_range(
-            pd.Timestamp('2011-01-04', tz='UTC'),
-            pd.Timestamp('2011-04-04', tz='UTC'),
+            self.MINUTE_INDEX_TO_SESSION_LABELS_START,
+            self.MINUTE_INDEX_TO_SESSION_LABELS_END,
         )
         minutes = minutes[range(offset, len(minutes), interval)]
 
@@ -520,17 +554,32 @@ class ExchangeCalendarTestBase(object):
         )
 
         # early close period
-        early_close_session_label = self.calendar.early_closes[0]
-        minutes_for_early_close = \
-            self.calendar.minutes_for_session(early_close_session_label)
-        _open, _close = self.calendar.open_and_close_for_session(
-            early_close_session_label
-        )
+        if self.HAVE_EARLY_CLOSES:
+            early_close_session_label = self.calendar.early_closes[0]
+            minutes_for_early_close = \
+                self.calendar.minutes_for_session(early_close_session_label)
+            _open, _close = self.calendar.open_and_close_for_session(
+                early_close_session_label
+            )
 
-        np.testing.assert_array_equal(
-            minutes_for_early_close,
-            pd.date_range(start=_open, end=_close, freq="min")
-        )
+            np.testing.assert_array_equal(
+                minutes_for_early_close,
+                pd.date_range(start=_open, end=_close, freq="min")
+            )
+
+        # late open period
+        if self.HAVE_LATE_OPENS:
+            late_open_session_label = self.calendar.late_opens[0]
+            minutes_for_late_open = \
+                self.calendar.minutes_for_session(late_open_session_label)
+            _open, _close = self.calendar.open_and_close_for_session(
+                late_open_session_label
+            )
+
+            np.testing.assert_array_equal(
+                minutes_for_late_open,
+                pd.date_range(start=_open, end=_close, freq="min")
+            )
 
     def test_sessions_in_range(self):
         # pick two sessions
@@ -551,9 +600,16 @@ class ExchangeCalendarTestBase(object):
                                             second_session_label)
         )
 
-    def _get_session_block(self):
-        # find and return a (full session, early close session, full session)
-        # block
+    def get_session_block(self):
+        """
+        Get an "interesting" range of three sessions in a row. By default this
+        tries to find and return a (full session, early close session, full
+        session) block.
+        """
+        if not self.HAVE_EARLY_CLOSES:
+            # If we don't have any early closes, just return a "random" chunk
+            # of three sessions.
+            return self.calendar.all_sessions[10:13]
 
         shortened_session = self.calendar.early_closes[0]
         shortened_session_idx = \
@@ -567,7 +623,7 @@ class ExchangeCalendarTestBase(object):
         return [session_before, shortened_session, session_after]
 
     def test_minutes_in_range(self):
-        sessions = self._get_session_block()
+        sessions = self.get_session_block()
 
         first_open, first_close = self.calendar.open_and_close_for_session(
             sessions[0]
@@ -620,7 +676,7 @@ class ExchangeCalendarTestBase(object):
         np.testing.assert_array_equal(all_minutes, minutes1)
 
     def test_minutes_for_sessions_in_range(self):
-        sessions = self._get_session_block()
+        sessions = self.get_session_block()
 
         minutes = self.calendar.minutes_for_sessions_in_range(
             sessions[0],
@@ -644,7 +700,7 @@ class ExchangeCalendarTestBase(object):
         )
 
     def test_sessions_window(self):
-        sessions = self._get_session_block()
+        sessions = self.get_session_block()
 
         np.testing.assert_array_equal(
             self.calendar.sessions_window(sessions[0], len(sessions) - 1),
@@ -659,7 +715,7 @@ class ExchangeCalendarTestBase(object):
         )
 
     def test_session_distance(self):
-        sessions = self._get_session_block()
+        sessions = self.get_session_block()
 
         forward_distance = self.calendar.session_distance(
             sessions[0],
@@ -726,7 +782,11 @@ class ExchangeCalendarTestBase(object):
         # make sure there's no weirdness around calculating the next day's
         # session's open time.
 
-        for date in ["2004-04-05", "2004-11-01"]:
+        m = dict(self.calendar.open_times)
+        m[pd.Timestamp.min] = m.pop(None)
+        open_times = pd.Series(m)
+
+        for date in self.DAYLIGHT_SAVINGS_DATES:
             next_day = pd.Timestamp(date, tz='UTC')
             open_date = next_day + Timedelta(days=self.calendar.open_offset)
 
@@ -741,14 +801,113 @@ class ExchangeCalendarTestBase(object):
                 (localized_open.year, localized_open.month, localized_open.day)
             )
 
+            open_ix = open_times.index.searchsorted(date, side='r')
+            if open_ix == len(open_times):
+                open_ix -= 1
+
             self.assertEqual(
-                self.calendar.open_time.hour,
+                open_times.iloc[open_ix].hour,
                 localized_open.hour
             )
 
             self.assertEqual(
-                self.calendar.open_time.minute,
+                open_times.iloc[open_ix].minute,
                 localized_open.minute
+            )
+
+    def test_start_end(self):
+        """
+        Check TradingCalendar with defined start/end dates.
+        """
+        start = pd.Timestamp('2010-1-3', tz='UTC')
+        end = pd.Timestamp('2010-1-10', tz='UTC')
+
+        calendar = self.calendar_class(start=start, end=end)
+
+        self.assertEqual(
+            calendar.first_trading_session,
+            self.TEST_START_END_EXPECTED_FIRST,
+        )
+        self.assertEqual(
+            calendar.last_trading_session,
+            self.TEST_START_END_EXPECTED_LAST,
+        )
+
+
+class EuronextCalendarTestBase(ExchangeCalendarTestBase):
+    """
+    Shared tests for countries on the Euronext exchange.
+    """
+    # Early close is 2:05 PM.
+    # Source: https://www.euronext.com/en/calendars-hours
+    TIMEDELTA_TO_EARLY_CLOSE = pd.Timedelta(hours=14, minutes=5)
+
+    def test_normal_year(self):
+        expected_holidays_2014 = [
+            pd.Timestamp('2014-01-01', tz='UTC'),  # New Year's Day
+            pd.Timestamp('2014-04-18', tz='UTC'),  # Good Friday
+            pd.Timestamp('2014-04-21', tz='UTC'),  # Easter Monday
+            pd.Timestamp('2014-05-01', tz='UTC'),  # Labor Day
+            pd.Timestamp('2014-12-25', tz='UTC'),  # Christmas
+            pd.Timestamp('2014-12-26', tz='UTC'),  # Boxing Day
+        ]
+
+        for session_label in expected_holidays_2014:
+            self.assertNotIn(session_label, self.calendar.all_sessions)
+
+        early_closes_2014 = [
+            pd.Timestamp('2014-12-24', tz='UTC'),  # Christmas Eve
+            pd.Timestamp('2014-12-31', tz='UTC'),  # New Year's Eve
+        ]
+
+        for early_close_session_label in early_closes_2014:
+            self.assertIn(
+                early_close_session_label,
+                self.calendar.early_closes,
+            )
+
+    def test_holidays_fall_on_weekend(self):
+        # Holidays falling on a weekend should not be made up during the week.
+        expected_sessions = [
+            # In 2010, Labor Day fell on a Saturday, so the market should be
+            # open on both the prior Friday and the following Monday.
+            pd.Timestamp('2010-04-30', tz='UTC'),
+            pd.Timestamp('2010-05-03', tz='UTC'),
+            # Christmas also fell on a Saturday, meaning Boxing Day fell on a
+            # Sunday. The market should still be open on both the prior Friday
+            # and the following Monday.
+            pd.Timestamp('2010-12-24', tz='UTC'),
+            pd.Timestamp('2010-12-27', tz='UTC'),
+        ]
+
+        for session_label in expected_sessions:
+            self.assertIn(session_label, self.calendar.all_sessions)
+
+    def test_half_days(self):
+        half_days = [
+            # In 2010, Christmas Eve and NYE are on Friday, so they should be
+            # half days.
+            pd.Timestamp('2010-12-24', tz=self.TZ),
+            pd.Timestamp('2010-12-31', tz=self.TZ),
+        ]
+        full_days = [
+            # In Dec 2011, Christmas Eve and NYE were both on a Saturday, so
+            # the preceding Fridays should be full days.
+            pd.Timestamp('2011-12-23', tz=self.TZ),
+            pd.Timestamp('2011-12-30', tz=self.TZ),
+        ]
+
+        for half_day in half_days:
+            half_day_close_time = self.calendar.next_close(half_day)
+            self.assertEqual(
+                half_day_close_time,
+                half_day + self.TIMEDELTA_TO_EARLY_CLOSE,
+            )
+        for full_day in full_days:
+            full_day_close_time = self.calendar.next_close(full_day)
+            self.assertEqual(
+                full_day_close_time,
+                full_day + self.TIMEDELTA_TO_NORMAL_CLOSE,
             )
 
 
@@ -799,3 +958,13 @@ class OpenDetectionTestCase(TestCase):
 
             exc_str = str(e.exception)
             self.assertIn("First Bad Minute: {}".format(minute), exc_str)
+
+
+class NoDSTExchangeCalendarTestBase(ExchangeCalendarTestBase):
+
+    def test_daylight_savings(self):
+        """
+        Several countries in Africa / Asia do not observe DST
+        so we need to skip over this test for those markets
+        """
+        pass
