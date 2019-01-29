@@ -64,7 +64,7 @@ if __name__ == '__main__':
     setup(
         name=DISTNAME,
         cmdclass=versioneer.get_cmdclass(),
-        version=versioneer.get_version(),
+        version="1.6.1",
         author=AUTHOR,
         author_email=AUTHOR_EMAIL,
         description=DESCRIPTION,
